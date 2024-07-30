@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Self-Destructing Messages</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <img src="https://images.vexels.com/content/255662/preview/paper-plane-school-stroke-36ea27.png" alt="Top Image" class="top-image"  width="100" height="100 >
+        <h1>Create a Self-Destructing Message</h1>
+        <form id="messageForm">
+            <label>
+                Recipient (phone number):
+                <input type="text" id="recipientNumber" required>
+            </label>
+            <br>
+            <label>
+                Expiration Time:
+                <select id="expirationTime">
+                    <option value="5">5 seconds</option>
+                    <option value="600">10 minutes</option>
+                    <option value="1200">20 minutes</option>
+                </select>
+            </label>
+            <br>
+            <label>
+                Message:
+                <textarea id="textMessage" rows="4" cols="50"></textarea>
+            </label>
+            <br>
+            <button type="submit">Create Message</button>
+        </form>
+
+        <div id="messageLink" style="display: none;">
+            <p>Your message link: <a id="link" href="#" target="_blank">Click here</a></p>
+        </div>
+
+        <div id="messageContent" style="display: none;">
+            <p id="content"></p>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('messageForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = new FormData();
+            formData.append('recipientNumber', document.getElementById('recipientNumber').value);
+            formData.append('expiration', document.getElementById('expirationTime').value);
+            formData.append('message', document.getElementById('textMessage').value);
+
+            const response = await fetch('/create-message', {
+                method: 'POST',
+                body: formData
+            });
+
+            const result = await response.json();
+            const recipientNumber = document.getElementById('recipientNumber').value;
+            document.getElementById('messageLink').style.display = 'block';
+            document.getElementById('link').href = `/message/${result.id}?token=${result.token}&recipientNumber=${encodeURIComponent(recipientNumber)}`;
+        });
+
+        const urlParams = new URLSearchParams(window.location.search);
+        const id = window.location.pathname.split('/').pop();
+        const token = urlParams.get('token');
+        const recipientNumber = urlParams.get('recipientNumber');
+
+        if (id && token && recipientNumber) {
+            const ws = new WebSocket(`ws://${window.location.host}`);
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                if (data.id === id && data.expired) {
+                    document.getElementById('messageContent').style.display = 'block';
+                    document.getElementById('content').textContent = 'This message has expired.';
+                }
+            };
+
+            async function fetchMessage() {
+                const response = await fetch(`/message/${id}?token=${token}&recipientNumber=${encodeURIComponent(recipientNumber)}`);
+                if (response.status === 404) {
+                    document.getElementById('messageContent').style.display = 'block';
+                    document.getElementById('content').textContent = 'This message has expired or does not exist.';
+                } else if (response.status === 403) {
+                    document.getElementById('messageContent').style.display = 'block';
+                    document.getElementById('content').textContent = 'This message was not intended for you.';
+                } else {
+                    const content = await response.text();
+                    document.getElementById('messageContent').style.display = 'block';
+                    document.getElementById('content').innerHTML = content;
+                }
+            }
+
+            fetchMessage();
+        }
+    </script>
+</body>
+</html>
