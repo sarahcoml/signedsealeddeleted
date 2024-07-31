@@ -24,18 +24,20 @@ app.post('/create-message', upload.none(), (req, res) => {
     messages[id] = {
         type: 'text',
         content: req.body.message,
-        expiresAt: Date.now() + expirationTime,
+        expiresAt: null, // Will be set when the message is accessed
         token: token,
         recipientNumber: req.body.recipientNumber
     };
 
     console.log('Message created:', messages[id]);
 
-    setTimeout(() => {
-        deleteMessage(id);
-    }, expirationTime);
+    res.json({ id, token, expirationTime });
+});
 
-    res.json({ id, token });
+app.post('/expire-message/:id', (req, res) => {
+    const id = req.params.id;
+    deleteMessage(id);
+    res.sendStatus(200);
 });
 
 app.get('/message/:id', (req, res) => {
@@ -50,6 +52,15 @@ app.get('/message/:id', (req, res) => {
 
     if (message.recipientNumber !== recipientNumber) {
         return res.status(403).send('This message was not intended for you.');
+    }
+
+    // Set the expiration time when the message is accessed
+    if (!message.expiresAt) {
+        const expirationTime = parseInt(req.query.expiration, 10) * 1000;
+        message.expiresAt = Date.now() + expirationTime;
+        setTimeout(() => {
+            deleteMessage(id);
+        }, expirationTime);
     }
 
     res.send(`<p>${message.content}</p>`);
